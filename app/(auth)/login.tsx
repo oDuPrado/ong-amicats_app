@@ -60,11 +60,20 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-
-      // Salvar nome no Firestore
+  
+      // Cria os dados do usuário no Firestore
+      const userData = {
+        name,
+        email,
+        login: email, // Login será o próprio e-mail
+        authId: cred.user.uid, // ID de autenticação gerado pelo Firebase Auth
+        createdAt: new Date().toISOString(), // Data de criação
+      };
+  
+      // Salva no Firestore
       const docRef = doc(db, "users", cred.user.uid);
-      await setDoc(docRef, { name, email, createdAt: new Date().toISOString() });
-
+      await setDoc(docRef, userData);
+  
       Alert.alert("Sucesso", "Conta criada com sucesso!");
     } catch (err: any) {
       console.log("Erro no SignUp:", err);
@@ -72,7 +81,7 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  }
+  }  
 
   async function handleSignIn() {
     if (!email || !password) {
