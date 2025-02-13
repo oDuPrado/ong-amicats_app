@@ -1,18 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
-  Image,
   FlatList,
   TouchableOpacity,
   Modal,
   Alert,
-  Button,
+  Animated,
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  Dimensions,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   collection,
   doc,
@@ -24,11 +25,11 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebaseConfig';
 import { v4 as uuidv4 } from 'uuid';
+import CatCard from './CatCard'; // Importe o componente criado
 
-// Tipos
-interface Cat {
+export interface Cat {
   id: string;
-  cadasterDocId: string; // IMPORTANTE: guarda o ID do doc do "Cadaster" em que o gato está
+  cadasterDocId: string;
   catName: string;
   ownerName: string;
   appointmentDate: string;
@@ -39,9 +40,9 @@ interface Cat {
 
 interface MedicalRecord {
   id: string;
-  name: string;       // Nome do gatinho
-  weight: string;     // Peso em KG
-  startDate: string;  // Data de início do atendimento
+  name: string;
+  weight: string;
+  startDate: string;
   medication: string;
   dose: string;
   viaDM: string;
@@ -49,7 +50,7 @@ interface MedicalRecord {
   endDate: string;
   obs: string;
   createdBy: string;
-  createdAt: string;  // data/hora formatada
+  createdAt: string;
 }
 
 const CatsScreen = () => {
@@ -58,11 +59,9 @@ const CatsScreen = () => {
   const [filteredCats, setFilteredCats] = useState<Cat[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modal principal de detalhes do gatinho
   const [catModalVisible, setCatModalVisible] = useState(false);
   const [selectedCat, setSelectedCat] = useState<Cat | null>(null);
 
-  // Modal para editar dados do próprio gatinho
   const [editCatModalVisible, setEditCatModalVisible] = useState(false);
   const [catData, setCatData] = useState<Cat>({
     id: '',
@@ -75,15 +74,12 @@ const CatsScreen = () => {
     medicalDetails: '',
   });
 
-  // Modal do histórico (prontuários) do gatinho
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
 
-  // Modal para cadastrar um novo prontuário
   const [newRecordModalVisible, setNewRecordModalVisible] = useState(false);
-  // Modal para editar um prontuário
   const [editRecordModalVisible, setEditRecordModalVisible] = useState(false);
-  // Dados de prontuário em edição
+
   const [recordData, setRecordData] = useState<MedicalRecord>({
     id: '',
     name: '',
@@ -99,17 +95,18 @@ const CatsScreen = () => {
     createdAt: '',
   });
 
-  // ============ FUNÇÃO DE FORMATAÇÃO DE DATA/HORA (dd/mm/aaaa hh:mm) ============
-  const formatDateTime = (date: Date) => {
-    const dia = String(date.getDate()).padStart(2, '0');
-    const mes = String(date.getMonth() + 1).padStart(2, '0');
-    const ano = date.getFullYear();
-    const horas = String(date.getHours()).padStart(2, '0');
-    const minutos = String(date.getMinutes()).padStart(2, '0');
-    return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
-  };
+  const screenOpacity = useRef(new Animated.Value(0)).current;
 
-  // ============= PEGAR DADOS DO USUÁRIO LOGADO =============
+  // Animação de fade-in ao montar a tela
+  useEffect(() => {
+    Animated.timing(screenOpacity, {
+      toValue: 1,
+      duration: 700,
+      useNativeDriver: true,
+    }).start();
+  }, [screenOpacity]);
+
+  // Buscar nome do usuário
   useEffect(() => {
     const fetchUserName = async () => {
       try {
@@ -127,26 +124,24 @@ const CatsScreen = () => {
     fetchUserName();
   }, []);
 
-  // ============= BUSCAR TODOS OS GATOS AO ENTRAR NA TELA =============
+  // Buscar lista de gatos
   useEffect(() => {
     const fetchCats = async () => {
       try {
-        console.log('Buscando gatinhos em Cadaster/.../Cats');
         const cadasterSnap = await getDocs(collection(db, 'Cadaster'));
         const catList: Cat[] = [];
 
-        // Para cada documento dentro de "Cadaster"
         for (const cadDoc of cadasterSnap.docs) {
-          const cadasterDocId = cadDoc.id; // ex: d5f5416c-7d6f-4a43-ac5c-015669cd2f4f
+          const cadasterDocId = cadDoc.id;
           const catsRef = collection(db, 'Cadaster', cadasterDocId, 'Cats');
           const catsSnap = await getDocs(catsRef);
 
           catsSnap.forEach((catDoc) => {
-            const catData = catDoc.data() as Omit<Cat, 'id' | 'cadasterDocId'>;
+            const cat = catDoc.data() as Omit<Cat, 'id' | 'cadasterDocId'>;
             catList.push({
               id: catDoc.id,
               cadasterDocId: cadasterDocId,
-              ...catData,
+              ...cat,
             });
           });
         }
@@ -160,7 +155,7 @@ const CatsScreen = () => {
     fetchCats();
   }, []);
 
-  // ============= FILTRO DA BARRA DE PESQUISA =============
+  // Filtro de pesquisa
   const handleSearch = (text: string) => {
     setSearchQuery(text);
     if (!text) {
@@ -173,7 +168,7 @@ const CatsScreen = () => {
     }
   };
 
-  // ============= ABRE/FECHA MODAL DE DETALHES =============
+  // Abre/fecha modal de detalhes
   const openCatModal = (cat: Cat) => {
     setSelectedCat(cat);
     setCatModalVisible(true);
@@ -183,7 +178,7 @@ const CatsScreen = () => {
     setSelectedCat(null);
   };
 
-  // ============= ABRE/FECHA MODAL DE EDIÇÃO DO GATINHO =============
+  // Abre/fecha modal de edição do gatinho
   const openEditCatModal = (cat: Cat) => {
     setCatData(cat);
     setEditCatModalVisible(true);
@@ -192,16 +187,15 @@ const CatsScreen = () => {
     setEditCatModalVisible(false);
   };
 
-  // ============= ATUALIZAR DADOS DO GATINHO =============
+  // Atualiza dados do gato
   const handleUpdateCat = async () => {
     try {
-      // Precisamos do cadasterDocId e do catData.id
       const catDocRef = doc(
         db,
         'Cadaster',
-        catData.cadasterDocId, // ex: d5f5416c-7d6f-4a43-ac5c-015669cd2f4f
+        catData.cadasterDocId,
         'Cats',
-        catData.id            // ex: 123e4567-e89b-12d3-a456-426614174000
+        catData.id
       );
 
       await updateDoc(catDocRef, {
@@ -213,7 +207,7 @@ const CatsScreen = () => {
         medicalDetails: catData.medicalDetails,
       });
 
-      // Atualizar localmente
+      // Atualiza a lista local
       setCats((prev) =>
         prev.map((c) => (c.id === catData.id ? { ...catData } : c))
       );
@@ -230,43 +224,48 @@ const CatsScreen = () => {
     }
   };
 
-  // ============= EXCLUIR GATINHO =============
+  // Excluir gato
   const handleDeleteCat = async (cat: Cat) => {
     try {
-      Alert.alert('Excluir Gato', 'Tem certeza que deseja excluir este gatinho?', [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sim, excluir',
-          onPress: async () => {
-            const catDocRef = doc(
-              db,
-              'Cadaster',
-              cat.cadasterDocId,
-              'Cats',
-              cat.id
-            );
-            await deleteDoc(catDocRef);
+      Alert.alert(
+        'Excluir Gato',
+        'Tem certeza que deseja excluir este gatinho?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Sim, excluir',
+            style: 'destructive',
+            onPress: async () => {
+              const catDocRef = doc(
+                db,
+                'Cadaster',
+                cat.cadasterDocId,
+                'Cats',
+                cat.id
+              );
+              await deleteDoc(catDocRef);
 
-            // Remover localmente
-            setCats((prev) => prev.filter((c) => c.id !== cat.id));
-            setFilteredCats((prev) => prev.filter((c) => c.id !== cat.id));
+              setCats((prev) => prev.filter((c) => c.id !== cat.id));
+              setFilteredCats((prev) => prev.filter((c) => c.id !== cat.id));
 
-            Alert.alert('Sucesso', 'Gato excluído!');
-            closeCatModal();
+              Alert.alert('Sucesso', 'Gato excluído!');
+              closeCatModal();
+            },
           },
-        },
-      ]);
+        ]
+      );
     } catch (error) {
       console.error('Erro ao excluir o gato:', error);
       Alert.alert('Erro', 'Não foi possível excluir o gato.');
     }
   };
 
-  // ============= HISTÓRICO (PRONTUÁRIOS) =============
+  // Abre modal de histórico
   const openHistoryModal = async () => {
-    if (!selectedCat) return;
+    if (!selectedCat) {
+      return;
+    }
     try {
-      // Coleção top-level "CatMedicalRecords" -> doc(selectedCat.id) -> subcoleção "records"
       const ref = collection(db, 'CatMedicalRecords', selectedCat.id, 'records');
       const snap = await getDocs(ref);
 
@@ -275,9 +274,8 @@ const CatsScreen = () => {
         records.push(docSnap.data() as MedicalRecord);
       });
 
-      // Ordena decrescente por data se quiser
+      // Ordena
       records.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-
       setMedicalRecords(records);
       setHistoryModalVisible(true);
     } catch (error) {
@@ -289,9 +287,21 @@ const CatsScreen = () => {
     setMedicalRecords([]);
   };
 
-  // ============= CRIAR/EDITAR PRONTUÁRIO =============
+  // Formata data/hora
+  const formatDateTime = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  };
+
+  // Abre/fecha modal de novo prontuário
   const openNewRecordModal = () => {
-    if (!selectedCat) return;
+    if (!selectedCat) {
+      return;
+    }
     setRecordData({
       id: '',
       name: selectedCat.catName,
@@ -312,6 +322,7 @@ const CatsScreen = () => {
     setNewRecordModalVisible(false);
   };
 
+  // Abre/fecha modal de edição de prontuário
   const openEditRecordModal = (record: MedicalRecord) => {
     setRecordData(record);
     setEditRecordModalVisible(true);
@@ -320,9 +331,12 @@ const CatsScreen = () => {
     setEditRecordModalVisible(false);
   };
 
+  // Salvar novo prontuário
   const handleSaveNewRecord = async () => {
     try {
-      if (!selectedCat) return;
+      if (!selectedCat) {
+        return;
+      }
       const newRecordId = uuidv4();
       const now = formatDateTime(new Date());
 
@@ -332,11 +346,15 @@ const CatsScreen = () => {
         createdAt: now,
       };
 
-      // Salva no Firestore
-      const recordRef = doc(db, 'CatMedicalRecords', selectedCat.id, 'records', newRecordId);
+      const recordRef = doc(
+        db,
+        'CatMedicalRecords',
+        selectedCat.id,
+        'records',
+        newRecordId
+      );
       await setDoc(recordRef, newRecord);
 
-      // Atualiza local
       setMedicalRecords((prev) => [newRecord, ...prev]);
       closeNewRecordModal();
       Alert.alert('Sucesso', 'Novo prontuário cadastrado!');
@@ -346,20 +364,27 @@ const CatsScreen = () => {
     }
   };
 
+  // Atualizar prontuário
   const handleUpdateRecord = async () => {
     try {
-      if (!selectedCat) return;
+      if (!selectedCat) {
+        return;
+      }
       const updatedDate = formatDateTime(new Date());
       const updatedRecord = {
         ...recordData,
         createdAt: updatedDate,
       };
 
-      // Atualiza no Firestore
-      const recordRef = doc(db, 'CatMedicalRecords', selectedCat.id, 'records', recordData.id);
+      const recordRef = doc(
+        db,
+        'CatMedicalRecords',
+        selectedCat.id,
+        'records',
+        recordData.id
+      );
       await updateDoc(recordRef, updatedRecord);
 
-      // Atualiza local
       setMedicalRecords((prev) =>
         prev.map((item) => (item.id === recordData.id ? updatedRecord : item))
       );
@@ -372,16 +397,25 @@ const CatsScreen = () => {
     }
   };
 
+  // Excluir prontuário
   const handleDeleteRecord = async (recordId: string) => {
     try {
-      if (!selectedCat) return;
+      if (!selectedCat) {
+        return;
+      }
       Alert.alert('Excluir Prontuário?', 'Confirma a exclusão deste histórico?', [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Excluir',
           style: 'destructive',
           onPress: async () => {
-            const recordRef = doc(db, 'CatMedicalRecords', selectedCat.id, 'records', recordId);
+            const recordRef = doc(
+              db,
+              'CatMedicalRecords',
+              selectedCat.id,
+              'records',
+              recordId
+            );
             await deleteDoc(recordRef);
 
             setMedicalRecords((prev) => prev.filter((item) => item.id !== recordId));
@@ -395,466 +429,508 @@ const CatsScreen = () => {
     }
   };
 
-  // ============= RENDERIZAÇÃO DOS CARDS DE GATINHOS =============
-  const renderCatCard = ({ item }: { item: Cat }) => (
-    <TouchableOpacity style={styles.card} onPress={() => openCatModal(item)}>
-      <Image source={{ uri: item.photo.uri }} style={styles.catImage} />
-      <Text style={styles.catName}>{item.catName}</Text>
-      <Text style={styles.catDate}>Atendimento: {item.appointmentDate}</Text>
-    </TouchableOpacity>
-  );
+  // Renderiza um card de gato usando CatCard
+  const renderCatCard = ({ item }: { item: Cat }) => {
+    return <CatCard cat={item} onPress={openCatModal} />;
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Barra de pesquisa */}
-      <TextInput
-        style={styles.searchBar}
-        placeholder="Pesquisar pelo Nome"
-        value={searchQuery}
-        onChangeText={handleSearch}
-      />
-
-      {/* Lista em 2 colunas */}
-      <FlatList
-        data={filteredCats}
-        renderItem={renderCatCard}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.rowContainer}
-        contentContainerStyle={styles.listContainer}
-      />
-
-      {/* ============= MODAL DE DETALHES DO GATO ============= */}
-      <Modal
-        visible={catModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeCatModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedCat && (
-              <ScrollView>
-                <Text style={styles.modalTitle}>{selectedCat.catName}</Text>
-                <Image
-                  source={{ uri: selectedCat.photo.uri }}
-                  style={styles.modalImage}
-                />
-                <Text style={styles.modalText}>
-                  <Text style={styles.modalLabel}>Dono:</Text> {selectedCat.ownerName}
-                </Text>
-                <Text style={styles.modalText}>
-                  <Text style={styles.modalLabel}>Data de Atendimento:</Text>{' '}
-                  {selectedCat.appointmentDate}
-                </Text>
-
-                <Text style={styles.modalText}>
-                  <Text style={styles.modalLabel}>Problemas Médicos:</Text>
-                </Text>
-                {selectedCat.medicalProblems.map((problem, i) => (
-                  <Text key={i} style={styles.modalText}>
-                    - {problem.name}
-                  </Text>
-                ))}
-
-                <Text style={styles.modalText}>
-                  <Text style={styles.modalLabel}>Detalhes:</Text>{' '}
-                  {selectedCat.medicalDetails}
-                </Text>
-
-                {/* Botões de ação */}
-                <View style={styles.buttonContainer}>
-                  <Button
-                    title="Excluir"
-                    color="red"
-                    onPress={() => handleDeleteCat(selectedCat)}
-                  />
-                  <Button
-                    title="Editar"
-                    onPress={() => openEditCatModal(selectedCat)}
-                  />
-                  <Button
-                    title="Atualizar"
-                    onPress={openHistoryModal}
-                  />
-                </View>
-
-                <Button title="Fechar" onPress={closeCatModal} />
-              </ScrollView>
-            )}
-          </View>
+    <Animated.View style={[styles.container, { opacity: screenOpacity }]}>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header de busca */}
+        <View style={styles.header}>
+          <Ionicons name="search" size={24} color="#374224" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Pesquisar pelo Nome"
+            value={searchQuery}
+            onChangeText={handleSearch}
+            placeholderTextColor="#999"
+          />
         </View>
-      </Modal>
 
-      {/* ============= MODAL PARA EDITAR GATINHO ============= */}
-      <Modal
-        visible={editCatModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeEditCatModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <ScrollView>
-              <Text style={styles.modalTitle}>Editar Gatinho</Text>
+        {/* Lista de gatos */}
+        <FlatList
+          data={filteredCats}
+          renderItem={renderCatCard}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.rowContainer}
+          contentContainerStyle={styles.listContainer}
+        />
 
-              <Text style={styles.modalLabel}>Nome do Gato</Text>
-              <TextInput
-                style={styles.input}
-                value={catData.catName}
-                onChangeText={(val) => setCatData({ ...catData, catName: val })}
-              />
+        {/* Modal de Detalhes do Gato */}
+        <Modal
+          visible={catModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeCatModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              {selectedCat && (
+                <ScrollView>
+                  <Text style={styles.modalTitle}>{selectedCat.catName}</Text>
 
-              <Text style={styles.modalLabel}>Nome do Dono</Text>
-              <TextInput
-                style={styles.input}
-                value={catData.ownerName}
-                onChangeText={(val) => setCatData({ ...catData, ownerName: val })}
-              />
+                  {/* Botões do Gato */}
+                  <View style={{ alignItems: 'center' }}>
+                    <Animated.Image
+                      source={{ uri: selectedCat.photo.uri }}
+                      style={styles.modalImage}
+                    />
+                  </View>
 
-              <Text style={styles.modalLabel}>Data de Atendimento</Text>
-              <TextInput
-                style={styles.input}
-                value={catData.appointmentDate}
-                maxLength={10}
-                onChangeText={(val) =>
-                  setCatData({ ...catData, appointmentDate: val })
-                }
-              />
-
-              <Text style={styles.modalLabel}>Observações</Text>
-              <TextInput
-                style={styles.input}
-                value={catData.medicalDetails}
-                onChangeText={(val) =>
-                  setCatData({ ...catData, medicalDetails: val })
-                }
-              />
-
-              {/* Caso queira editar photo, medicalProblems etc., faça aqui também */}
-
-              <Button title="Salvar" onPress={handleUpdateCat} />
-              <Button title="Cancelar" onPress={closeEditCatModal} />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ============= MODAL DO HISTÓRICO (PRONTUÁRIOS) ============= */}
-      <Modal
-        visible={historyModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeHistoryModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.historyTitle}>
-              Histórico de {selectedCat?.catName}
-            </Text>
-
-            <ScrollView style={{ maxHeight: 400 }}>
-              {medicalRecords.map((record) => (
-                <TouchableOpacity
-                  key={record.id}
-                  style={styles.recordCard}
-                  onPress={() => openEditRecordModal(record)}
-                >
-                  <Text style={styles.recordTitle}>
-                    Atualização feita por: {record.createdBy}
+                  <Text style={styles.modalText}>
+                    <Text style={styles.modalLabel}>Dono: </Text>
+                    {selectedCat.ownerName}
                   </Text>
-                  <Text>Em: {record.createdAt}</Text>
-                  <Text>Medicamento: {record.medication}</Text>
-                  <Text style={{ color: 'gray', marginTop: 4 }}>
-                    (Toque para ver/editar detalhes)
+                  <Text style={styles.modalText}>
+                    <Text style={styles.modalLabel}>Data de Atendimento: </Text>
+                    {selectedCat.appointmentDate}
                   </Text>
-                  <Button
-                    title="Excluir Prontuário"
-                    color="red"
-                    onPress={() => handleDeleteRecord(record.id)}
-                  />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
 
-            <View style={{ marginVertical: 10 }}>
-              <Button title="Cadastrar Novo Prontuário" onPress={openNewRecordModal} />
+                  <Text style={styles.modalText}>
+                    <Text style={styles.modalLabel}>Problemas Médicos:</Text>
+                  </Text>
+                  {selectedCat.medicalProblems.map((problem, index) => (
+                    <Text key={index} style={styles.modalItemText}>
+                      - {problem.name}
+                    </Text>
+                  ))}
+
+                  <Text style={styles.modalText}>
+                    <Text style={styles.modalLabel}>Detalhes: </Text>
+                    {selectedCat.medicalDetails}
+                  </Text>
+
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={[styles.iconButton, { backgroundColor: '#BF2F2F' }]}
+                      onPress={() => handleDeleteCat(selectedCat)}
+                    >
+                      <Ionicons name="trash" size={20} color="#FFFFFF" />
+                      <Text style={styles.iconButtonText}>Excluir</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.iconButton, { backgroundColor: '#2F8CBF' }]}
+                      onPress={() => openEditCatModal(selectedCat)}
+                    >
+                      <Ionicons name="create" size={20} color="#FFFFFF" />
+                      <Text style={styles.iconButtonText}>Editar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.iconButton, { backgroundColor: '#4A9B3C' }]}
+                      onPress={openHistoryModal}
+                    >
+                      <Ionicons name="document-text" size={20} color="#FFFFFF" />
+                      <Text style={styles.iconButtonText}>Histórico</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity style={styles.closeButton} onPress={closeCatModal}>
+                    <Ionicons name="close-circle" size={28} color="#374224" />
+                    <Text style={styles.closeButtonText}>Fechar</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              )}
             </View>
-
-            <Button title="Fechar Histórico" onPress={closeHistoryModal} />
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      {/* ============= MODAL PARA CADASTRAR NOVO PRONTUÁRIO ============= */}
-      <Modal
-        visible={newRecordModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeNewRecordModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <ScrollView>
-              <Text style={styles.modalTitle}>Cadastrar Prontuário</Text>
+        {/* Modal de Edição do Gato */}
+        <Modal
+          visible={editCatModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeEditCatModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <ScrollView>
+                <Text style={styles.modalTitle}>Editar Gatinho</Text>
 
-              <Text style={styles.modalLabel}>Nome</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.name}
-                onChangeText={(val) => setRecordData({ ...recordData, name: val })}
-              />
+                <Text style={styles.modalLabel}>Nome do Gato</Text>
+                <TextInput
+                  style={styles.input}
+                  value={catData.catName}
+                  onChangeText={(val) => setCatData({ ...catData, catName: val })}
+                />
 
-              <Text style={styles.modalLabel}>Peso (KG)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={recordData.weight}
-                onChangeText={(val) => setRecordData({ ...recordData, weight: val })}
-              />
+                <Text style={styles.modalLabel}>Nome do Dono</Text>
+                <TextInput
+                  style={styles.input}
+                  value={catData.ownerName}
+                  onChangeText={(val) => setCatData({ ...catData, ownerName: val })}
+                />
 
-              <Text style={styles.modalLabel}>Data de Início</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.startDate}
-                placeholder="dd/mm/aaaa"
-                maxLength={10}
-                onChangeText={(text) => {
-                  let formattedText = text
-                    .replace(/\D/g, '')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{4})(\d)/, '$1');
-                  setRecordData({ ...recordData, startDate: formattedText });
-                }}
-              />
+                <Text style={styles.modalLabel}>Data de Atendimento</Text>
+                <TextInput
+                  style={styles.input}
+                  value={catData.appointmentDate}
+                  maxLength={10}
+                  onChangeText={(val) => setCatData({ ...catData, appointmentDate: val })}
+                />
 
-              <Text style={styles.modalLabel}>Medicamento</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.medication}
-                onChangeText={(val) =>
-                  setRecordData({ ...recordData, medication: val })
-                }
-              />
+                <Text style={styles.modalLabel}>Observações</Text>
+                <TextInput
+                  style={styles.multilineInput}
+                  multiline
+                  value={catData.medicalDetails}
+                  onChangeText={(val) => setCatData({ ...catData, medicalDetails: val })}
+                />
 
-              <Text style={styles.modalLabel}>Dose</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.dose}
-                onChangeText={(val) => setRecordData({ ...recordData, dose: val })}
-              />
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: '#4A9B3C' }]}
+                    onPress={handleUpdateCat}
+                  >
+                    <Ionicons name="save" size={20} color="#FFFFFF" />
+                    <Text style={styles.iconButtonText}>Salvar</Text>
+                  </TouchableOpacity>
 
-              <Text style={styles.modalLabel}>Via DM</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.viaDM}
-                onChangeText={(val) => setRecordData({ ...recordData, viaDM: val })}
-              />
-
-              <Text style={styles.modalLabel}>Frequência</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.frequency}
-                onChangeText={(val) =>
-                  setRecordData({ ...recordData, frequency: val })
-                }
-              />
-
-              <Text style={styles.modalLabel}>Data de Término</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.endDate}
-                placeholder="dd/mm/aaaa"
-                maxLength={10}
-                onChangeText={(text) => {
-                  let formattedText = text
-                    .replace(/\D/g, '')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{4})(\d)/, '$1');
-                  setRecordData({ ...recordData, endDate: formattedText });
-                }}
-              />
-
-              <Text style={styles.modalLabel}>Observações</Text>
-              <TextInput
-                style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-                multiline
-                value={recordData.obs}
-                onChangeText={(val) => setRecordData({ ...recordData, obs: val })}
-              />
-
-              <Button title="Salvar" onPress={handleSaveNewRecord} />
-              <Button title="Cancelar" onPress={closeNewRecordModal} />
-            </ScrollView>
+                  <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: '#BF2F2F' }]}
+                    onPress={closeEditCatModal}
+                  >
+                    <Ionicons name="close" size={20} color="#FFFFFF" />
+                    <Text style={styles.iconButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      {/* ============= MODAL PARA EDITAR PRONTUÁRIO ============= */}
-      <Modal
-        visible={editRecordModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeEditRecordModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <ScrollView>
-              <Text style={styles.modalTitle}>Editar Prontuário</Text>
+        {/* Modal de Histórico de Prontuários */}
+        <Modal
+          visible={historyModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeHistoryModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.historyTitle}>
+                Histórico de {selectedCat?.catName}
+              </Text>
 
-              <Text style={styles.modalLabel}>Nome</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.name}
-                onChangeText={(val) => setRecordData({ ...recordData, name: val })}
-              />
+              <ScrollView style={styles.historyList}>
+                {medicalRecords.map((record) => (
+                  <TouchableOpacity
+                    key={record.id}
+                    style={styles.recordCard}
+                    onPress={() => openEditRecordModal(record)}
+                  >
+                    <Text style={styles.recordTitle}>
+                      Atualização feita por: {record.createdBy}
+                    </Text>
+                    <Text style={styles.modalText}>Em: {record.createdAt}</Text>
+                    <Text style={styles.modalText}>
+                      Medicamento: {record.medication}
+                    </Text>
+                    <Text style={styles.hintText}>
+                      (Toque para ver ou editar detalhes)
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.iconButton, { backgroundColor: '#BF2F2F', marginTop: 10 }]}
+                      onPress={() => handleDeleteRecord(record.id)}
+                    >
+                      <Ionicons name="trash" size={20} color="#FFFFFF" />
+                      <Text style={styles.iconButtonText}>Excluir</Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
-              <Text style={styles.modalLabel}>Peso (KG)</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.weight}
-                keyboardType="numeric"
-                onChangeText={(val) => setRecordData({ ...recordData, weight: val })}
-              />
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: '#4A9B3C', alignSelf: 'center' }]}
+                onPress={openNewRecordModal}
+              >
+                <Ionicons name="add-circle" size={20} color="#FFFFFF" />
+                <Text style={styles.iconButtonText}>Novo Prontuário</Text>
+              </TouchableOpacity>
 
-              <Text style={styles.modalLabel}>Data de Início</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.startDate}
-                maxLength={10}
-                onChangeText={(text) => {
-                  let formattedText = text
-                    .replace(/\D/g, '')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{4})(\d)/, '$1');
-                  setRecordData({ ...recordData, startDate: formattedText });
-                }}
-              />
-
-              <Text style={styles.modalLabel}>Medicamento</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.medication}
-                onChangeText={(val) =>
-                  setRecordData({ ...recordData, medication: val })
-                }
-              />
-
-              <Text style={styles.modalLabel}>Dose</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.dose}
-                onChangeText={(val) => setRecordData({ ...recordData, dose: val })}
-              />
-
-              <Text style={styles.modalLabel}>Via DM</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.viaDM}
-                onChangeText={(val) => setRecordData({ ...recordData, viaDM: val })}
-              />
-
-              <Text style={styles.modalLabel}>Frequência</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.frequency}
-                onChangeText={(val) =>
-                  setRecordData({ ...recordData, frequency: val })
-                }
-              />
-
-              <Text style={styles.modalLabel}>Data de Término</Text>
-              <TextInput
-                style={styles.input}
-                value={recordData.endDate}
-                maxLength={10}
-                onChangeText={(text) => {
-                  let formattedText = text
-                    .replace(/\D/g, '')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{2})(\d)/, '$1/$2')
-                    .replace(/(\d{4})(\d)/, '$1');
-                  setRecordData({ ...recordData, endDate: formattedText });
-                }}
-              />
-
-              <Text style={styles.modalLabel}>Observações</Text>
-              <TextInput
-                style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-                multiline
-                value={recordData.obs}
-                onChangeText={(val) => setRecordData({ ...recordData, obs: val })}
-              />
-
-              <Button title="Salvar Edição" onPress={handleUpdateRecord} />
-              <Button title="Cancelar" onPress={closeEditRecordModal} />
-            </ScrollView>
+              <TouchableOpacity style={styles.closeButton} onPress={closeHistoryModal}>
+                <Ionicons name="arrow-down-circle" size={28} color="#374224" />
+                <Text style={styles.closeButtonText}>Fechar Histórico</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </Modal>
+
+        {/* Modal de Novo Prontuário */}
+        <Modal
+          visible={newRecordModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeNewRecordModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <ScrollView>
+                <Text style={styles.modalTitle}>Cadastrar Prontuário</Text>
+
+                <Text style={styles.modalLabel}>Nome</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.name}
+                  onChangeText={(val) => setRecordData({ ...recordData, name: val })}
+                />
+
+                <Text style={styles.modalLabel}>Peso (KG)</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={recordData.weight}
+                  onChangeText={(val) => setRecordData({ ...recordData, weight: val })}
+                />
+
+                <Text style={styles.modalLabel}>Data de Início</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.startDate}
+                  placeholder="dd/mm/aaaa"
+                  maxLength={10}
+                  onChangeText={(text) => {
+                    const formattedText = text
+                      .replace(/\D/g, '')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{4})(\d)/, '$1');
+                    setRecordData({ ...recordData, startDate: formattedText });
+                  }}
+                />
+
+                <Text style={styles.modalLabel}>Medicamento</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.medication}
+                  onChangeText={(val) => setRecordData({ ...recordData, medication: val })}
+                />
+
+                <Text style={styles.modalLabel}>Dose</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.dose}
+                  onChangeText={(val) => setRecordData({ ...recordData, dose: val })}
+                />
+
+                <Text style={styles.modalLabel}>Via DM</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.viaDM}
+                  onChangeText={(val) => setRecordData({ ...recordData, viaDM: val })}
+                />
+
+                <Text style={styles.modalLabel}>Frequência</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.frequency}
+                  onChangeText={(val) => setRecordData({ ...recordData, frequency: val })}
+                />
+
+                <Text style={styles.modalLabel}>Data de Término</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.endDate}
+                  placeholder="dd/mm/aaaa"
+                  maxLength={10}
+                  onChangeText={(text) => {
+                    const formattedText = text
+                      .replace(/\D/g, '')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{4})(\d)/, '$1');
+                    setRecordData({ ...recordData, endDate: formattedText });
+                  }}
+                />
+
+                <Text style={styles.modalLabel}>Observações</Text>
+                <TextInput
+                  style={styles.multilineInput}
+                  multiline
+                  value={recordData.obs}
+                  onChangeText={(val) => setRecordData({ ...recordData, obs: val })}
+                />
+
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: '#4A9B3C' }]}
+                    onPress={handleSaveNewRecord}
+                  >
+                    <Ionicons name="save" size={20} color="#FFFFFF" />
+                    <Text style={styles.iconButtonText}>Salvar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: '#BF2F2F' }]}
+                    onPress={closeNewRecordModal}
+                  >
+                    <Ionicons name="close" size={20} color="#FFFFFF" />
+                    <Text style={styles.iconButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal de Edição de Prontuário */}
+        <Modal
+          visible={editRecordModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeEditRecordModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <ScrollView>
+                <Text style={styles.modalTitle}>Editar Prontuário</Text>
+
+                <Text style={styles.modalLabel}>Nome</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.name}
+                  onChangeText={(val) => setRecordData({ ...recordData, name: val })}
+                />
+
+                <Text style={styles.modalLabel}>Peso (KG)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.weight}
+                  keyboardType="numeric"
+                  onChangeText={(val) => setRecordData({ ...recordData, weight: val })}
+                />
+
+                <Text style={styles.modalLabel}>Data de Início</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.startDate}
+                  maxLength={10}
+                  onChangeText={(text) => {
+                    const formattedText = text
+                      .replace(/\D/g, '')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{4})(\d)/, '$1');
+                    setRecordData({ ...recordData, startDate: formattedText });
+                  }}
+                />
+
+                <Text style={styles.modalLabel}>Medicamento</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.medication}
+                  onChangeText={(val) => setRecordData({ ...recordData, medication: val })}
+                />
+
+                <Text style={styles.modalLabel}>Dose</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.dose}
+                  onChangeText={(val) => setRecordData({ ...recordData, dose: val })}
+                />
+
+                <Text style={styles.modalLabel}>Via DM</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.viaDM}
+                  onChangeText={(val) => setRecordData({ ...recordData, viaDM: val })}
+                />
+
+                <Text style={styles.modalLabel}>Frequência</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.frequency}
+                  onChangeText={(val) => setRecordData({ ...recordData, frequency: val })}
+                />
+
+                <Text style={styles.modalLabel}>Data de Término</Text>
+                <TextInput
+                  style={styles.input}
+                  value={recordData.endDate}
+                  maxLength={10}
+                  onChangeText={(text) => {
+                    const formattedText = text
+                      .replace(/\D/g, '')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{2})(\d)/, '$1/$2')
+                      .replace(/(\d{4})(\d)/, '$1');
+                    setRecordData({ ...recordData, endDate: formattedText });
+                  }}
+                />
+
+                <Text style={styles.modalLabel}>Observações</Text>
+                <TextInput
+                  style={styles.multilineInput}
+                  multiline
+                  value={recordData.obs}
+                  onChangeText={(val) => setRecordData({ ...recordData, obs: val })}
+                />
+
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: '#4A9B3C' }]}
+                    onPress={handleUpdateRecord}
+                  >
+                    <Ionicons name="save" size={20} color="#FFFFFF" />
+                    <Text style={styles.iconButtonText}>Salvar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: '#BF2F2F' }]}
+                    onPress={closeEditRecordModal}
+                  >
+                    <Ionicons name="close" size={20} color="#FFFFFF" />
+                    <Text style={styles.iconButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+      </SafeAreaView>
+    </Animated.View>
   );
 };
 
-// ============= ESTILOS =============
-// ============= ESTILOS =============
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#B6E388', // Verde claro semelhante ao fundo da logo
-    padding: 10,
+    backgroundColor: '#B6E388',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    backgroundColor: '#F9FFEF',
+    padding: 8,
+    margin: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#374224',
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchBar: {
-    height: 40,
-    borderColor: '#374224', // Verde escuro para os detalhes
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-    backgroundColor: '#F9FFEF', // Verde bem claro para contraste
+    flex: 1,
+    fontSize: 16,
     color: '#333',
+    padding: 6,
   },
   listContainer: {
     paddingBottom: 20,
   },
   rowContainer: {
     justifyContent: 'space-between',
-  },
-  card: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    marginVertical: 10,
-    marginRight: 5,
-    marginLeft: 5,
-    padding: 10,
-    alignItems: 'center',
-    shadowColor: '#374224', // Verde escuro para sombras suaves
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  catImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#374224', // Contorno verde escuro
-  },
-  catName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#374224', // Verde escuro
-  },
-  catDate: {
-    fontSize: 14,
-    color: '#666', // Neutro
-    marginTop: 5,
   },
   modalOverlay: {
     flex: 1,
@@ -863,45 +939,53 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#F9FFEF', // Verde bem claro
+    backgroundColor: '#F9FFEF',
     borderRadius: 12,
     padding: 16,
     maxHeight: '90%',
-    borderColor: '#374224', // Borda verde escuro
     borderWidth: 1,
+    borderColor: '#374224',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#374224',
     marginBottom: 10,
+    textAlign: 'center',
   },
   modalText: {
     fontSize: 16,
-    color: '#333', // Neutro para textos principais
+    color: '#333',
     marginBottom: 5,
+  },
+  modalItemText: {
+    fontSize: 15,
+    color: '#444',
+    marginLeft: 8,
+    marginBottom: 2,
   },
   modalLabel: {
     fontWeight: 'bold',
-    color: '#374224', // Destaque verde escuro
+    color: '#374224',
   },
   modalImage: {
-    width: '100%',
-    height: 220,
+    width: width * 0.6,
+    height: width * 0.6,
     borderRadius: 10,
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#374224',
     resizeMode: 'cover',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginVertical: 16,
   },
   historyTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#374224',
     marginBottom: 10,
+    textAlign: 'center',
+  },
+  historyList: {
+    maxHeight: 400,
   },
   recordCard: {
     backgroundColor: '#F9FFEF',
@@ -917,6 +1001,11 @@ const styles = StyleSheet.create({
     color: '#374224',
     marginBottom: 4,
   },
+  hintText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
   input: {
     borderWidth: 1,
     borderColor: '#374224',
@@ -927,7 +1016,48 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
+  multilineInput: {
+    borderWidth: 1,
+    borderColor: '#374224',
+    borderRadius: 8,
+    padding: 8,
+    backgroundColor: '#FFFFFF',
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 12,
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 10,
+    flexWrap: 'wrap',
+  },
+  iconButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginHorizontal: 4,
+  },
+  iconButtonText: {
+    color: '#FFFFFF',
+    marginLeft: 6,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  closeButton: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    marginTop: 16,
+  },
+  closeButtonText: {
+    color: '#374224',
+    marginLeft: 6,
+    fontSize: 16,
+  },
 });
 
 export default CatsScreen;
-

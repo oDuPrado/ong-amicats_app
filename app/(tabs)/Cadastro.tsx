@@ -3,13 +3,14 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   ScrollView,
   TouchableOpacity,
   Alert,
   StyleSheet,
   Image,
+  Animated,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -59,7 +60,7 @@ const schema = yup.object().shape({
       })
     )
     .required('Problemas médicos são obrigatórios')
-    .default([]), // Garante que o valor padrão seja um array vazio
+    .default([]),
   medicalDetails: yup.string().required('Detalhes médicos são obrigatórios'),
 });
 
@@ -68,8 +69,14 @@ const CatMedicalForm = () => {
   const [selectedProblems, setSelectedProblems] = useState<
     { id: string; name: string }[]
   >([]);
+  const [fadeAnim] = useState(new Animated.Value(0));
 
-  const { control, handleSubmit, formState: { errors }, reset } = useForm<FormData>({
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<FormData>({
     resolver: yupResolver(schema),
     defaultValues: {
       ownerName: '',
@@ -79,6 +86,14 @@ const CatMedicalForm = () => {
       medicalDetails: '',
     },
   });
+
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 700,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
   const handleTakePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -96,22 +111,16 @@ const CatMedicalForm = () => {
       setPhoto({ uri: result.assets[0].uri });
     }
   };
+
   const onSubmit = async (data: FormData) => {
     try {
-      const cadasterId = 'd5f5416c-7d6f-4a43-ac5c-015669cd2f4f'; // Substitua por um ID fixo ou dinâmico
-      const catId = uuidv4(); // ID único para o gato
+      const cadasterId = 'd5f5416c-7d6f-4a43-ac5c-015669cd2f4f';
+      const catId = uuidv4();
       const submissionData = { ...data, medicalProblems: selectedProblems, photo };
-  
-      console.log('Iniciando cadastro no Firebase...');
-      console.log('Dados:', submissionData);
-  
-      // Referência à subcoleção 'Cats' dentro do 'Cadaster'
+
       const catRef = doc(db, 'Cadaster', cadasterId, 'Cats', catId);
-  
-      // Salvando os dados do gato na subcoleção 'Cats'
       await setDoc(catRef, submissionData);
-  
-      console.log('Cadastro salvo com sucesso no Firebase!');
+
       Alert.alert('Sucesso', 'Cadastro realizado com sucesso!');
       reset();
       setSelectedProblems([]);
@@ -120,7 +129,7 @@ const CatMedicalForm = () => {
       console.error('Erro ao salvar no Firebase:', error);
       Alert.alert('Erro', 'Ocorreu um erro ao salvar o cadastro.');
     }
-  };  
+  };
 
   const handleAddProblem = (id: string) => {
     const problem = medicalProblemsList.find((item) => item.id === id);
@@ -134,150 +143,180 @@ const CatMedicalForm = () => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.label}>Nome do Proprietário</Text>
-      <Controller
-        control={control}
-        name="ownerName"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <TextInput
-            style={[styles.input, errors.ownerName && styles.errorInput]}
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            placeholder="Digite o nome do proprietário"
-          />
-        )}
-      />
-      {errors.ownerName && (
-        <Text style={styles.errorText}>{errors.ownerName.message}</Text>
-      )}
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Text style={styles.title}>Cadastro Médico do Gato</Text>
 
-      <Text style={styles.label}>Nome do Gato</Text>
-      <Controller
-        control={control}
-        name="catName"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <TextInput
-            style={[styles.input, errors.catName && styles.errorInput]}
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            placeholder="Digite o nome do gato"
-          />
+        <Text style={styles.label}>Nome do Proprietário</Text>
+        <Controller
+          control={control}
+          name="ownerName"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              style={[styles.input, errors.ownerName && styles.errorInput]}
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              placeholder="Digite o nome do proprietário"
+              placeholderTextColor="#999"
+            />
+          )}
+        />
+        {errors.ownerName && (
+          <Text style={styles.errorText}>{errors.ownerName.message}</Text>
         )}
-      />
-      {errors.catName && (
-        <Text style={styles.errorText}>{errors.catName.message}</Text>
-      )}
 
-      <Text style={styles.label}>Data do Atendimento</Text>
-      <Controller
-        control={control}
-        name="appointmentDate"
-        render={({ field: { onChange, value } }) => (
-          <TextInput
-            style={[styles.input, errors.appointmentDate && styles.errorInput]}
-            value={value}
-            placeholder="dd/mm/aaaa"
-            maxLength={10}
-            keyboardType="default"
-            onChangeText={(text) => {
-              let formattedText = text
-                .replace(/\D/g, '')
-                .replace(/(\d{2})(\d)/, '$1/$2')
-                .replace(/(\d{2})(\d)/, '$1/$2')
-                .replace(/(\d{4})(\d)/, '$1');
-              onChange(formattedText);
-            }}
-          />
+        <Text style={styles.label}>Nome do Gato</Text>
+        <Controller
+          control={control}
+          name="catName"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              style={[styles.input, errors.catName && styles.errorInput]}
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              placeholder="Digite o nome do gato"
+              placeholderTextColor="#999"
+            />
+          )}
+        />
+        {errors.catName && (
+          <Text style={styles.errorText}>{errors.catName.message}</Text>
         )}
-      />
-      {errors.appointmentDate && (
-        <Text style={styles.errorText}>{errors.appointmentDate.message}</Text>
-      )}
 
-      <Text style={styles.label}>Problemas Médicos</Text>
-      <View style={styles.dropdown}>
-        {medicalProblemsList.map((problem) => (
-          <TouchableOpacity
-            key={problem.id}
-            onPress={() => handleAddProblem(problem.id)}
-            style={styles.dropdownItem}
-          >
-            <Text>{problem.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View>
-        {selectedProblems.map((problem) => (
-          <View key={problem.id} style={styles.selectedProblem}>
-            <Text>{problem.name}</Text>
-            <TouchableOpacity onPress={() => handleRemoveProblem(problem.id)}>
-              <Text style={styles.removeText}>Remover</Text>
+        <Text style={styles.label}>Data do Atendimento</Text>
+        <Controller
+          control={control}
+          name="appointmentDate"
+          render={({ field: { onChange, value } }) => (
+            <TextInput
+              style={[styles.input, errors.appointmentDate && styles.errorInput]}
+              value={value}
+              placeholder="dd/mm/aaaa"
+              placeholderTextColor="#999"
+              maxLength={10}
+              keyboardType="default"
+              onChangeText={(text) => {
+                const formattedText = text
+                  .replace(/\D/g, '')
+                  .replace(/(\d{2})(\d)/, '$1/$2')
+                  .replace(/(\d{2})(\d)/, '$1/$2')
+                  .replace(/(\d{4})(\d)/, '$1');
+                onChange(formattedText);
+              }}
+            />
+          )}
+        />
+        {errors.appointmentDate && (
+          <Text style={styles.errorText}>{errors.appointmentDate.message}</Text>
+        )}
+
+        <Text style={styles.label}>Problemas Médicos</Text>
+        <View style={styles.dropdownContainer}>
+          {medicalProblemsList.map((problem) => (
+            <TouchableOpacity
+              key={problem.id}
+              onPress={() => handleAddProblem(problem.id)}
+              style={styles.dropdownItem}
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={20}
+                color="#374224"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.dropdownText}>{problem.name}</Text>
             </TouchableOpacity>
+          ))}
+        </View>
+
+        {selectedProblems.length > 0 && (
+          <View style={styles.selectedProblemsContainer}>
+            {selectedProblems.map((problem) => (
+              <View key={problem.id} style={styles.selectedProblem}>
+                <Text style={styles.selectedProblemText}>{problem.name}</Text>
+                <TouchableOpacity onPress={() => handleRemoveProblem(problem.id)}>
+                  <Ionicons name="close-circle" size={24} color="#BF2F2F" />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
-
-      <Text style={styles.label}>Detalhes Médicos</Text>
-      <Controller
-        control={control}
-        name="medicalDetails"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <TextInput
-            style={[styles.textArea, errors.medicalDetails && styles.errorInput]}
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            placeholder="Detalhes do atendimento"
-            multiline
-          />
         )}
-      />
-      {errors.medicalDetails && (
-        <Text style={styles.errorText}>{errors.medicalDetails.message}</Text>
-      )}
 
-      <Button title="Capturar Foto do Gato" onPress={handleTakePhoto} />
-      {photo && <Image source={photo} style={styles.photo} />}
+        <Text style={styles.label}>Detalhes Médicos</Text>
+        <Controller
+          control={control}
+          name="medicalDetails"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              style={[styles.textArea, errors.medicalDetails && styles.errorInput]}
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              placeholder="Detalhes do atendimento"
+              placeholderTextColor="#999"
+              multiline
+            />
+          )}
+        />
+        {errors.medicalDetails && (
+          <Text style={styles.errorText}>{errors.medicalDetails.message}</Text>
+        )}
 
-      <Button title="Salvar Cadastro" onPress={handleSubmit(onSubmit)} />
-    </ScrollView>
+        <TouchableOpacity style={styles.photoButton} onPress={handleTakePhoto}>
+          <Ionicons name="camera" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Text style={styles.photoButtonText}>Capturar Foto do Gato</Text>
+        </TouchableOpacity>
+        {photo && <Image source={photo} style={styles.photoPreview} />}
+
+        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit(onSubmit)}>
+          <Ionicons name="save" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Text style={styles.submitButtonText}>Salvar Cadastro</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </Animated.View>
   );
 };
 
-export default CatMedicalForm;
-
-
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
+    flex: 1,
+    backgroundColor: '#B6E388',
+  },
+  scrollContainer: {
     padding: 16,
-    backgroundColor: '#DFFFE2', // Fundo verde claro
+    paddingBottom: 50,
+  },
+  title: {
+    fontSize: 20,
+    color: '#374224',
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
   },
   label: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#374224',
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#CCC',
+    borderColor: '#374224',
     borderRadius: 8,
-    padding: 8,
-    backgroundColor: '#FFF',
+    padding: 10,
+    backgroundColor: '#FFFFFF',
     fontSize: 16,
     color: '#333',
     marginBottom: 12,
   },
   textArea: {
     borderWidth: 1,
-    borderColor: '#CCC',
+    borderColor: '#374224',
     borderRadius: 8,
-    padding: 8,
-    backgroundColor: '#FFF',
+    padding: 10,
+    backgroundColor: '#FFFFFF',
     fontSize: 16,
     color: '#333',
     height: 100,
@@ -285,44 +324,91 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   errorInput: {
-    borderColor: '#E3350D',
+    borderColor: '#BF2F2F',
   },
   errorText: {
     fontSize: 14,
-    color: '#E3350D',
+    color: '#BF2F2F',
     marginBottom: 12,
   },
-  dropdown: {
+  dropdownContainer: {
     borderWidth: 1,
-    borderColor: '#CCC',
+    borderColor: '#374224',
     borderRadius: 8,
-    backgroundColor: '#FFF',
+    backgroundColor: '#F9FFEF',
     paddingVertical: 8,
     marginBottom: 12,
   },
   dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#EEE',
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  selectedProblemsContainer: {
+    marginBottom: 12,
+    backgroundColor: '#F9FFEF',
+    borderWidth: 1,
+    borderColor: '#374224',
+    borderRadius: 8,
+    padding: 8,
   },
   selectedProblem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#E8F5E9', // Fundo verde claro
+    backgroundColor: '#E8F5E9',
     padding: 10,
     borderRadius: 8,
     marginBottom: 8,
   },
-  removeText: {
-    color: '#E3350D',
+  selectedProblemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  photoButton: {
+    flexDirection: 'row',
+    backgroundColor: '#4A9B3C',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  photoButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: 'bold',
   },
-  photo: {
+  photoPreview: {
     width: 150,
     height: 150,
     borderRadius: 8,
     marginVertical: 16,
     alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: '#374224',
+  },
+  submitButton: {
+    flexDirection: 'row',
+    backgroundColor: '#2F8CBF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 10,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
+
+export default CatMedicalForm;
